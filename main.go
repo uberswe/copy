@@ -4,41 +4,56 @@ import (
 	"fmt"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/uberswe/interval"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"path"
+	"time"
 )
 
 var (
 	cfgFile string
 	src     string
 	dest    string
+	repeat  string
 	rootCmd = &cobra.Command{
 		Use:   "copy",
 		Short: "Copy copies files and directories recursively",
 		Long:  "Copy copies files and directories recursively\n\nCreated by Markus Tenghamn (https://github.com/uberswe)",
-		Run: func(cmd *cobra.Command, args []string) {
-			viperSrc := viper.Get("source")
-			viperDest := viper.Get("destination")
-			if (src == "" || dest == "") && viperDest != nil && viperSrc != nil {
-				dest = fmt.Sprintf("%v", viperDest)
-				src = fmt.Sprintf("%v", viperSrc)
-			}
-			if src == "" || dest == "" {
-				_ = cmd.Usage()
-				return
-			}
-			for _, arg := range args {
-				log.Println(arg)
-			}
-			err := Dir(src, dest)
-			er(err)
-			fmt.Printf("%s copied to %s", src, dest)
-		},
+		Run:   rootFunc,
 	}
 )
+
+func rootFunc(cmd *cobra.Command, args []string) {
+	viperSrc := viper.Get("source")
+	viperDest := viper.Get("destination")
+	viperRepeat := viper.Get("repeat")
+	if (src == "" || dest == "") && viperDest != nil && viperSrc != nil {
+		dest = fmt.Sprintf("%v", viperDest)
+		src = fmt.Sprintf("%v", viperSrc)
+	}
+	if repeat == "" && viperRepeat != nil {
+		repeat = fmt.Sprintf("%v", viperRepeat)
+	}
+	if src == "" || dest == "" {
+		_ = cmd.Usage()
+		return
+	}
+	if repeat != "" {
+		err := interval.DoEvery(repeat, repeatFunc, -1)
+		er(err)
+	} else {
+		err := Dir(src, dest)
+		er(err)
+	}
+	fmt.Printf("%s copied to %s", src, dest)
+}
+
+func repeatFunc(interval time.Duration, time time.Time) {
+	err := Dir(src, dest)
+	er(err)
+}
 
 func init() {
 	var err error
@@ -46,9 +61,12 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file (default is ./.copy.yaml)")
 	rootCmd.PersistentFlags().StringVarP(&src, "source", "s", "", "path to the source file or directory")
 	rootCmd.PersistentFlags().StringVarP(&dest, "destination", "d", "", "path to the destination file or directory")
+	rootCmd.PersistentFlags().StringVarP(&repeat, "repeat", "e", "", "if specified the path will be copied at the provided interval (example 1m for 1 minute)")
 	err = viper.BindPFlag("source", rootCmd.PersistentFlags().Lookup("source"))
 	er(err)
 	err = viper.BindPFlag("destination", rootCmd.PersistentFlags().Lookup("destination"))
+	er(err)
+	err = viper.BindPFlag("repeat", rootCmd.PersistentFlags().Lookup("repeat"))
 	er(err)
 }
 
