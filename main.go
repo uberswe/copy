@@ -37,15 +37,11 @@ func rootFunc(cmd *cobra.Command, args []string) {
 		ds, destOk := viperDest.([]interface{})
 		ss, srcOk := viperSrc.([]interface{})
 		if !destOk {
-			log.Println("dest conversion failed")
-			log.Println(reflect.TypeOf(viperDest))
 			dest = fmt.Sprintf("%v", viperDest)
 		} else {
 			destSlice = interfaceSliceToStringSlice(ds)
 		}
 		if !srcOk {
-			log.Println("src conversion failed")
-			log.Println(reflect.TypeOf(viperSrc))
 			src = fmt.Sprintf("%v", viperSrc)
 		} else {
 			srcSlice = interfaceSliceToStringSlice(ss)
@@ -82,7 +78,6 @@ func rootFunc(cmd *cobra.Command, args []string) {
 func interfaceSliceToStringSlice(i []interface{}) []string {
 	var r []string
 	for _, s := range i {
-		log.Printf("%v\n", s)
 		if str, ok := s.(string); ok {
 			r = append(r, str)
 		} else {
