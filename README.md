@@ -2,6 +2,8 @@
 
 Copy copies files and directories recursively with options to do so repeatedly.
 
+It's possible to specify to arrays of source and destination directories with the use of a yaml file.
+
 ```
 Usage:
   copy [flags]
