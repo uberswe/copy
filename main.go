@@ -7,17 +7,21 @@ import (
 	"github.com/uberswe/interval"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
 	"path"
+	"reflect"
 	"time"
 )
 
 var (
-	cfgFile string
-	src     string
-	dest    string
-	repeat  string
-	rootCmd = &cobra.Command{
+	cfgFile   string
+	src       string
+	dest      string
+	repeat    string
+	destSlice []string
+	srcSlice  []string
+	rootCmd   = &cobra.Command{
 		Use:   "copy",
 		Short: "Copy copies files and directories recursively",
 		Long:  "Copy copies files and directories recursively\n\nCreated by Markus Tenghamn (https://github.com/uberswe)",
@@ -30,28 +34,85 @@ func rootFunc(cmd *cobra.Command, args []string) {
 	viperDest := viper.Get("destination")
 	viperRepeat := viper.Get("repeat")
 	if (src == "" || dest == "") && viperDest != nil && viperSrc != nil {
-		dest = fmt.Sprintf("%v", viperDest)
-		src = fmt.Sprintf("%v", viperSrc)
+		ds, destOk := viperDest.([]interface{})
+		ss, srcOk := viperSrc.([]interface{})
+		if !destOk {
+			log.Println("dest conversion failed")
+			log.Println(reflect.TypeOf(viperDest))
+			dest = fmt.Sprintf("%v", viperDest)
+		} else {
+			destSlice = interfaceSliceToStringSlice(ds)
+		}
+		if !srcOk {
+			log.Println("src conversion failed")
+			log.Println(reflect.TypeOf(viperSrc))
+			src = fmt.Sprintf("%v", viperSrc)
+		} else {
+			srcSlice = interfaceSliceToStringSlice(ss)
+		}
 	}
 	if repeat == "" && viperRepeat != nil {
 		repeat = fmt.Sprintf("%v", viperRepeat)
 	}
-	if src == "" || dest == "" {
+	if (src == "" || dest == "") && (len(srcSlice) == 0 || len(destSlice) == 0) {
 		_ = cmd.Usage()
 		return
 	}
 	if repeat != "" {
-		err := interval.DoEvery(repeat, repeatFunc, -1)
-		er(err)
+		if len(destSlice) > 0 && len(srcSlice) > 0 && len(srcSlice) == len(destSlice) {
+			err := interval.DoEvery(repeat, nil, repeatFuncMulti, -1)
+			er(err)
+		} else {
+			err := interval.DoEvery(repeat, nil, repeatFunc, -1)
+			er(err)
+			fmt.Printf("%s copied to %s", src, dest)
+		}
 	} else {
-		err := Dir(src, dest)
-		er(err)
+		if len(destSlice) > 0 && len(srcSlice) > 0 && len(srcSlice) == len(destSlice) {
+			err := copyMultipleDirectories(srcSlice, destSlice)
+			er(err)
+		} else {
+			err := copyDir(src, dest)
+			er(err)
+			fmt.Printf("%s copied to %s", src, dest)
+		}
 	}
-	fmt.Printf("%s copied to %s", src, dest)
 }
 
-func repeatFunc(interval time.Duration, time time.Time) {
-	err := Dir(src, dest)
+func interfaceSliceToStringSlice(i []interface{}) []string {
+	var r []string
+	for _, s := range i {
+		log.Printf("%v\n", s)
+		if str, ok := s.(string); ok {
+			r = append(r, str)
+		} else {
+			panic(fmt.Sprintf("expected string in slice but got %s", reflect.TypeOf(s)))
+		}
+	}
+	return r
+}
+
+func copyMultipleDirectories(s []string, d []string) error {
+	for i := 0; i < len(s); i++ {
+		log.Printf("%s copied to %s\n", s[i], d[i])
+		err := copyDir(s[i], d[i])
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func repeatFuncMulti(interval time.Duration, time time.Time, extra interface{}) {
+	for i := 0; i < len(src); i++ {
+		log.Printf("%s copied to %s\n", srcSlice[i], destSlice[i])
+		err := copyDir(srcSlice[i], destSlice[i])
+		er(err)
+	}
+}
+
+func repeatFunc(interval time.Duration, time time.Time, extra interface{}) {
+	err := copyDir(src, dest)
 	er(err)
 }
 
@@ -81,8 +142,8 @@ func execute() {
 	}
 }
 
-// Dir copies a whole directory recursively
-func Dir(source string, destination string) error {
+// copyDir copies a whole directory recursively
+func copyDir(source string, destination string) error {
 	var err error
 	var fileInfos []os.FileInfo
 	var sourceInfo os.FileInfo
@@ -103,11 +164,11 @@ func Dir(source string, destination string) error {
 		destinationFilePath := path.Join(destination, fileInfo.Name())
 
 		if fileInfo.IsDir() {
-			if err = Dir(sourceFilePath, destinationFilePath); err != nil {
+			if err = copyDir(sourceFilePath, destinationFilePath); err != nil {
 				fmt.Println(err)
 			}
 		} else {
-			if err = File(sourceFilePath, destinationFilePath); err != nil {
+			if err = copyFile(sourceFilePath, destinationFilePath); err != nil {
 				fmt.Println(err)
 			}
 		}
@@ -115,7 +176,7 @@ func Dir(source string, destination string) error {
 	return nil
 }
 
-func File(src, dst string) error {
+func copyFile(src, dst string) error {
 	var err error
 	var sourceFile *os.File
 	var destinationFile *os.File

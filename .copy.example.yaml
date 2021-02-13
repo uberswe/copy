@@ -1,2 +1,4 @@
-source: "bob"
-destination: "sally"
+source:
+  - "bob"
+destination:
+  - "sally"
